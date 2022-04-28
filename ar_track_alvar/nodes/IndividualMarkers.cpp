@@ -70,7 +70,7 @@ ar_track_alvar_msgs::AlvarMarkers arPoseMarkers_;
 visualization_msgs::Marker rvizMarker_;
 tf::TransformListener* tf_listener;
 tf::TransformBroadcaster* tf_broadcaster;
-MarkerDetector<MarkerData> marker_detector;
+
 
 bool enableSwitched = false;
 bool enabled = true;
@@ -288,7 +288,7 @@ int PlaneFitPoseImprovement(int id, const ARCloud& corners_3D,
   return 0;
 }
 
-void GetMarkerPoses(cv::Mat& image, ARCloud& cloud)
+void GetMarkerPoses(cv::Mat& image, ARCloud& cloud, MarkerDetector<MarkerData> &marker_detector)
 {
   // Detect and track the markers
   if (marker_detector.Detect(image, cam, true, false, max_new_marker_error,
@@ -298,7 +298,7 @@ void GetMarkerPoses(cv::Mat& image, ARCloud& cloud)
     for (size_t i = 0; i < marker_detector.markers->size(); i++)
     {
       vector<cv::Point, Eigen::aligned_allocator<cv::Point> > pixels;
-      Marker* m = &((*marker_detector.markers)[i]);
+      Marker* m = &((*(marker_detector.markers))[i]);
       int id = m->GetId();
       ROS_DEBUG_STREAM("******* ID: " << id);
 
@@ -341,6 +341,10 @@ void GetMarkerPoses(cv::Mat& image, ARCloud& cloud)
 
 void getPointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
 {
+  MarkerDetector<MarkerData> marker_detector;
+
+  marker_detector.SetMarkerSize(marker_size, marker_resolution, marker_margin);
+
   sensor_msgs::ImagePtr image_msg(new sensor_msgs::Image);
 
   // If desired, use the frame in the message's header.
@@ -368,7 +372,7 @@ void getPointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
 
     // Use the kinect to improve the pose
     Pose ret_pose;
-    GetMarkerPoses(cv_ptr_->image, cloud);
+    GetMarkerPoses(cv_ptr_->image, cloud, marker_detector);
 
     tf::StampedTransform CamToOutput;
     if (image_msg->header.frame_id == output_frame)
@@ -398,7 +402,7 @@ void getPointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
       {
         // Get the pose relative to the camera
         int id = (*(marker_detector.markers))[i].GetId();
-        Pose p = (*(marker_detector.markers))[i].pose;
+        const Pose &p = (*(marker_detector.markers))[i].pose;
 
         double px = p.translation[0] / 100.0;
         double py = p.translation[1] / 100.0;
@@ -588,8 +592,6 @@ int main(int argc, char* argv[])
   pn.setParam("marker_size", marker_size);
   pn.setParam("max_new_marker_error", max_new_marker_error);
   pn.setParam("max_track_error", max_track_error);
-
-  marker_detector.SetMarkerSize(marker_size, marker_resolution, marker_margin);
 
   cam = new Camera(n, cam_info_topic);
 
